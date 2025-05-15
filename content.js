@@ -59,6 +59,7 @@ const MAX_BUFFER_LENGTH = 20; // Maximum length to track
 // Main event listener for all input events
 document.addEventListener("input", handleInput, true);
 document.addEventListener("keydown", handleKeyDown, true);
+document.addEventListener("paste", handlePaste, true); // Add paste event listener
 
 // Handle input events to detect trigger words
 function handleInput(event) {
@@ -145,6 +146,38 @@ function handleKeyDown(event) {
     replaceText(element, startPos, selectionStart, replacement);
 
     // Prevent the space or enter from being added
+    event.preventDefault();
+  }
+}
+
+// Handle paste events to include clipboard text
+async function handlePaste(event) {
+  if (!isEditableElement(event.target)) return;
+
+  const element = event.target;
+
+  // Get clipboard text
+  const clipboardText = await navigator.clipboard.readText();
+
+  // Get current cursor position and text
+  const { text, selectionStart, selectionEnd } = getTextAndSelection(element);
+
+  // Find the word before the cursor
+  const wordBeforeCursor = getWordBeforeCursor(text, selectionStart);
+
+  // Check if the word is a trigger
+  if (wordBeforeCursor && shortcuts.hasOwnProperty(wordBeforeCursor)) {
+    // Calculate positions for replacement
+    const startPos = selectionStart - wordBeforeCursor.length;
+    const replacement = shortcuts[wordBeforeCursor];
+
+    // Modify the replacement to include clipboard text
+    const modifiedReplacement = `${replacement} ${clipboardText}`; // Example: Add clipboard text after replacement
+
+    // Perform the replacement
+    replaceText(element, startPos, selectionStart, modifiedReplacement);
+
+    // Prevent the default paste behavior
     event.preventDefault();
   }
 }

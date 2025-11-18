@@ -2,11 +2,14 @@
  * TextShortcuts Content Script
  * Handles text replacement in editable fields across web pages
  * @author Bharath K
- * @version 2.0.0
+ * @version 2.1.0
  */
 
-/** @type {Object<string, string>} Shortcut mappings */
+/** @type {Object<string, Object>} Shortcut mappings */
 let shortcuts = {};
+
+/** @type {Object<string, string>} Custom variables */
+let customVariables = {};
 
 /** @type {Object} Extension settings */
 let settings = {
@@ -15,6 +18,8 @@ let settings = {
   caseSensitive: false,
   whitelist: [],
   blacklist: [],
+  showQuickInsertMenu: true,
+  trackStatistics: true,
 };
 
 /** @type {HTMLElement|null} Last triggered element */
@@ -32,11 +37,20 @@ let debounceTimeout = null;
 /** @type {number} Debounce delay in milliseconds */
 const DEBOUNCE_DELAY = 10;
 
+/** @type {HTMLElement|null} Quick insert menu element */
+let quickInsertMenu = null;
+
+/** @type {number} Selected shortcut index in quick insert menu */
+let selectedShortcutIndex = 0;
+
+/** @type {Array<string>} Filtered shortcuts for quick insert */
+let filteredShortcuts = [];
+
 /**
- * Initialize shortcuts and settings from storage
+ * Initialize shortcuts, settings, and custom variables from storage
  */
 function initializeExtension() {
-  chrome.storage.local.get(["shortcuts", "settings"], (data) => {
+  chrome.storage.local.get(["shortcuts", "settings", "customVariables"], (data) => {
     if (data.shortcuts) {
       shortcuts = data.shortcuts;
     } else {
@@ -52,6 +66,10 @@ function initializeExtension() {
     if (data.settings) {
       settings = { ...settings, ...data.settings };
     }
+
+    if (data.customVariables) {
+      customVariables = data.customVariables;
+    }
   });
 }
 
@@ -59,7 +77,7 @@ function initializeExtension() {
 initializeExtension();
 
 /**
- * Listen for storage changes to update shortcuts and settings in real-time
+ * Listen for storage changes to update shortcuts, settings, and custom variables in real-time
  */
 chrome.storage.onChanged.addListener((changes) => {
   if (changes.shortcuts) {
@@ -67,6 +85,9 @@ chrome.storage.onChanged.addListener((changes) => {
   }
   if (changes.settings) {
     settings = { ...settings, ...changes.settings.newValue };
+  }
+  if (changes.customVariables) {
+    customVariables = changes.customVariables.newValue || {};
   }
 });
 
@@ -100,7 +121,7 @@ function processVariables(text) {
   if (!text) return text;
 
   const now = new Date();
-  const variables = {
+  const builtInVariables = {
     "{date}": now.toLocaleDateString(),
     "{time}": now.toLocaleTimeString(),
     "{datetime}": now.toLocaleString(),
@@ -113,8 +134,11 @@ function processVariables(text) {
     "{timestamp}": now.getTime().toString(),
   };
 
+  // Merge built-in and custom variables
+  const allVariables = { ...builtInVariables, ...customVariables };
+
   let processedText = text;
-  for (const [variable, value] of Object.entries(variables)) {
+  for (const [variable, value] of Object.entries(allVariables)) {
     processedText = processedText.replace(new RegExp(escapeRegex(variable), "g"), value);
   }
 
@@ -213,11 +237,15 @@ function checkAndReplaceTrigger(element, text, cursorPos) {
       const endPos = cursorPos;
 
       // Get replacement text and process variables
-      let replacement = shortcuts[trigger];
+      const shortcut = shortcuts[trigger];
+      let replacement = typeof shortcut === "string" ? shortcut : shortcut.content;
       replacement = processVariables(replacement);
 
       // Perform the replacement
       replaceText(element, startPos, endPos, replacement);
+
+      // Update statistics
+      updateStatisticsForTrigger(trigger);
 
       // Reset buffer after replacement
       inputBuffer = "";
@@ -250,11 +278,15 @@ function handleKeyDown(event) {
     if (trigger) {
       // Calculate positions for replacement
       const startPos = selectionStart - wordBeforeCursor.length;
-      let replacement = shortcuts[trigger];
+      const shortcut = shortcuts[trigger];
+      let replacement = typeof shortcut === "string" ? shortcut : shortcut.content;
       replacement = processVariables(replacement);
 
       // Perform the replacement
       replaceText(element, startPos, selectionStart, replacement);
+
+      // Update statistics
+      updateStatisticsForTrigger(trigger);
 
       // Prevent the space or enter from being added
       event.preventDefault();
@@ -520,5 +552,299 @@ function debugLog(message, data) {
   // }
 }
 
+/**
+ * Update statistics for a trigger
+ * @param {string} trigger - The trigger that was used
+ */
+function updateStatisticsForTrigger(trigger) {
+  if (!settings.trackStatistics) return;
+
+  try {
+    chrome.runtime.sendMessage({
+      action: "updateStatistics",
+      trigger: trigger,
+    });
+  } catch (error) {
+    console.warn("[TextShortcuts] Error updating statistics:", error);
+  }
+}
+
+/**
+ * Listen for messages from background script
+ */
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  try {
+    if (request.action === "insertText") {
+      // Insert text from context menu
+      insertTextAtCursor(request.text);
+      if (request.trigger) {
+        updateStatisticsForTrigger(request.trigger);
+      }
+      sendResponse({ success: true });
+    } else if (request.action === "showQuickInsert") {
+      // Show quick insert menu
+      showQuickInsertMenu();
+      sendResponse({ success: true });
+    }
+  } catch (error) {
+    console.error("[TextShortcuts] Error handling message:", error);
+    sendResponse({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Insert text at cursor position
+ * @param {string} text - Text to insert
+ */
+function insertTextAtCursor(text) {
+  const activeElement = document.activeElement;
+
+  if (!isEditableElement(activeElement)) {
+    showNotification("Please focus on a text field first", "error");
+    return;
+  }
+
+  const { selectionStart, selectionEnd } = getTextAndSelection(activeElement);
+  const processedText = processVariables(text);
+
+  replaceText(activeElement, selectionStart, selectionEnd, processedText);
+}
+
+/**
+ * Show quick insert menu
+ */
+function showQuickInsertMenu() {
+  if (!settings.showQuickInsertMenu || quickInsertMenu) return;
+
+  // Create overlay
+  const overlay = document.createElement("div");
+  overlay.className = "textshortcuts-overlay";
+  overlay.addEventListener("click", hideQuickInsertMenu);
+
+  // Create menu
+  quickInsertMenu = document.createElement("div");
+  quickInsertMenu.className = "textshortcuts-quick-insert";
+
+  // Header
+  const header = document.createElement("div");
+  header.className = "textshortcuts-header";
+  header.innerHTML = `
+    <h3 class="textshortcuts-title">Quick Insert</h3>
+    <button class="textshortcuts-close-btn" aria-label="Close">×</button>
+  `;
+  header.querySelector(".textshortcuts-close-btn").addEventListener("click", hideQuickInsertMenu);
+
+  // Search input
+  const searchContainer = document.createElement("div");
+  searchContainer.className = "textshortcuts-search";
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.placeholder = "Search shortcuts...";
+  searchInput.addEventListener("input", (e) => filterShortcutsInMenu(e.target.value));
+  searchInput.addEventListener("keydown", handleMenuKeydown);
+  searchContainer.appendChild(searchInput);
+
+  // Shortcuts list
+  const shortcutsList = document.createElement("div");
+  shortcutsList.className = "textshortcuts-shortcuts-list";
+
+  // Footer
+  const footer = document.createElement("div");
+  footer.className = "textshortcuts-footer";
+  footer.innerHTML = `
+    <div><kbd>↑</kbd> <kbd>↓</kbd> Navigate | <kbd>Enter</kbd> Insert | <kbd>Esc</kbd> Close</div>
+    <div>${Object.keys(shortcuts).length} shortcuts</div>
+  `;
+
+  // Assemble menu
+  quickInsertMenu.appendChild(header);
+  quickInsertMenu.appendChild(searchContainer);
+  quickInsertMenu.appendChild(shortcutsList);
+  quickInsertMenu.appendChild(footer);
+
+  document.body.appendChild(overlay);
+  document.body.appendChild(quickInsertMenu);
+
+  // Render shortcuts
+  filterShortcutsInMenu("");
+
+  // Focus search input
+  setTimeout(() => searchInput.focus(), 100);
+}
+
+/**
+ * Hide quick insert menu
+ */
+function hideQuickInsertMenu() {
+  if (!quickInsertMenu) return;
+
+  const overlay = document.querySelector(".textshortcuts-overlay");
+  if (overlay) overlay.remove();
+
+  quickInsertMenu.remove();
+  quickInsertMenu = null;
+  selectedShortcutIndex = 0;
+  filteredShortcuts = [];
+}
+
+/**
+ * Filter shortcuts in menu
+ * @param {string} query - Search query
+ */
+function filterShortcutsInMenu(query) {
+  if (!quickInsertMenu) return;
+
+  const lowerQuery = query.toLowerCase();
+  filteredShortcuts = Object.keys(shortcuts).filter((trigger) => {
+    const shortcut = shortcuts[trigger];
+    const content = typeof shortcut === "string" ? shortcut : shortcut.content;
+    return (
+      trigger.toLowerCase().includes(lowerQuery) || content.toLowerCase().includes(lowerQuery)
+    );
+  });
+
+  // Sort by usage count if available
+  filteredShortcuts.sort((a, b) => {
+    const aShortcut = shortcuts[a];
+    const bShortcut = shortcuts[b];
+    const aCount = typeof aShortcut === "object" ? (aShortcut.usageCount || 0) : 0;
+    const bCount = typeof bShortcut === "object" ? (bShortcut.usageCount || 0) : 0;
+    return bCount - aCount;
+  });
+
+  selectedShortcutIndex = 0;
+  renderShortcutsList();
+}
+
+/**
+ * Render shortcuts list
+ */
+function renderShortcutsList() {
+  if (!quickInsertMenu) return;
+
+  const shortcutsList = quickInsertMenu.querySelector(".textshortcuts-shortcuts-list");
+  shortcutsList.innerHTML = "";
+
+  if (filteredShortcuts.length === 0) {
+    shortcutsList.innerHTML = `
+      <div class="textshortcuts-empty-state">No shortcuts found</div>
+    `;
+    return;
+  }
+
+  filteredShortcuts.forEach((trigger, index) => {
+    const shortcut = shortcuts[trigger];
+    const content = typeof shortcut === "string" ? shortcut : shortcut.content;
+    const category = typeof shortcut === "object" ? shortcut.category || "Uncategorized" : "Uncategorized";
+    const usageCount = typeof shortcut === "object" ? shortcut.usageCount || 0 : 0;
+
+    const preview = content.length > 50 ? content.substring(0, 50) + "..." : content;
+
+    const item = document.createElement("div");
+    item.className = "textshortcuts-shortcut-item";
+    if (index === selectedShortcutIndex) {
+      item.classList.add("selected");
+    }
+
+    item.innerHTML = `
+      <div class="textshortcuts-shortcut-info">
+        <div class="textshortcuts-shortcut-trigger">${escapeHtml(trigger)}</div>
+        <div class="textshortcuts-shortcut-content">${escapeHtml(preview)}</div>
+      </div>
+      <div class="textshortcuts-shortcut-meta">
+        <span class="textshortcuts-shortcut-category">${escapeHtml(category)}</span>
+        ${usageCount > 0 ? `<span class="textshortcuts-shortcut-count">${usageCount} uses</span>` : ""}
+      </div>
+    `;
+
+    item.addEventListener("click", () => insertShortcutFromMenu(trigger));
+    shortcutsList.appendChild(item);
+  });
+
+  // Scroll selected item into view
+  const selectedItem = shortcutsList.querySelector(".selected");
+  if (selectedItem) {
+    selectedItem.scrollIntoView({ block: "nearest" });
+  }
+}
+
+/**
+ * Handle keyboard navigation in menu
+ * @param {KeyboardEvent} event - Keyboard event
+ */
+function handleMenuKeydown(event) {
+  if (!quickInsertMenu) return;
+
+  switch (event.key) {
+    case "ArrowDown":
+      event.preventDefault();
+      selectedShortcutIndex = Math.min(selectedShortcutIndex + 1, filteredShortcuts.length - 1);
+      renderShortcutsList();
+      break;
+
+    case "ArrowUp":
+      event.preventDefault();
+      selectedShortcutIndex = Math.max(selectedShortcutIndex - 1, 0);
+      renderShortcutsList();
+      break;
+
+    case "Enter":
+      event.preventDefault();
+      if (filteredShortcuts.length > 0 && filteredShortcuts[selectedShortcutIndex]) {
+        insertShortcutFromMenu(filteredShortcuts[selectedShortcutIndex]);
+      }
+      break;
+
+    case "Escape":
+      event.preventDefault();
+      hideQuickInsertMenu();
+      break;
+  }
+}
+
+/**
+ * Insert shortcut from menu
+ * @param {string} trigger - Trigger to insert
+ */
+function insertShortcutFromMenu(trigger) {
+  const shortcut = shortcuts[trigger];
+  if (!shortcut) return;
+
+  const content = typeof shortcut === "string" ? shortcut : shortcut.content;
+  insertTextAtCursor(content);
+  updateStatisticsForTrigger(trigger);
+  hideQuickInsertMenu();
+
+  showNotification(`Inserted: ${trigger}`, "success");
+}
+
+/**
+ * Show notification toast
+ * @param {string} message - Notification message
+ * @param {string} type - Notification type (success, error, info)
+ */
+function showNotification(message, type = "info") {
+  const notification = document.createElement("div");
+  notification.className = `textshortcuts-notification ${type}`;
+  notification.textContent = message;
+
+  document.body.appendChild(notification);
+
+  setTimeout(() => {
+    notification.remove();
+  }, 3000);
+}
+
+/**
+ * Escape HTML for safe rendering
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped text
+ */
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
 // Log initialization
-debugLog("Content script loaded and ready");
+debugLog("Content script loaded and ready v2.1.0");

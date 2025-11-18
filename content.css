@@ -1,0 +1,325 @@
+/**
+ * TextShortcuts Content Script Styles
+ * Styles for quick insert menu and other injected UI elements
+ * @author Bharath K
+ * @version 2.1.0
+ */
+
+/* Quick Insert Menu Container */
+.textshortcuts-quick-insert {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  z-index: 2147483647; /* Maximum z-index */
+  width: 500px;
+  max-width: 90vw;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  animation: textshortcuts-fadein 0.2s ease-out;
+}
+
+@keyframes textshortcuts-fadein {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -45%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+/* Dark theme support */
+@media (prefers-color-scheme: dark) {
+  .textshortcuts-quick-insert {
+    background: #1f2937;
+    border-color: #374151;
+    color: #f9fafb;
+  }
+
+  .textshortcuts-quick-insert input {
+    background: #111827;
+    border-color: #374151;
+    color: #f9fafb;
+  }
+
+  .textshortcuts-shortcut-item {
+    border-bottom-color: #374151 !important;
+  }
+
+  .textshortcuts-shortcut-item:hover {
+    background: #374151 !important;
+  }
+
+  .textshortcuts-shortcut-item.selected {
+    background: #4b5563 !important;
+  }
+
+  .textshortcuts-shortcut-trigger {
+    color: #f9fafb !important;
+  }
+
+  .textshortcuts-shortcut-content {
+    color: #9ca3af !important;
+  }
+
+  .textshortcuts-shortcut-category {
+    background: #374151 !important;
+    color: #9ca3af !important;
+  }
+
+  .textshortcuts-empty-state {
+    color: #9ca3af !important;
+  }
+
+  .textshortcuts-header {
+    border-bottom-color: #374151 !important;
+  }
+
+  .textshortcuts-footer {
+    background: #111827 !important;
+    border-top-color: #374151 !important;
+    color: #9ca3af !important;
+  }
+}
+
+/* Header */
+.textshortcuts-header {
+  padding: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.textshortcuts-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.textshortcuts-close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.textshortcuts-close-btn:hover {
+  background: #f3f4f6;
+}
+
+/* Search Input */
+.textshortcuts-search {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.textshortcuts-search input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.textshortcuts-search input:focus {
+  border-color: #4f46e5;
+}
+
+/* Shortcuts List */
+.textshortcuts-shortcuts-list {
+  overflow-y: auto;
+  max-height: 400px;
+  flex: 1;
+}
+
+.textshortcuts-shortcut-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid #e5e7eb;
+  transition: background 0.15s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.textshortcuts-shortcut-item:hover {
+  background: #f9fafb;
+}
+
+.textshortcuts-shortcut-item.selected {
+  background: #eef2ff;
+}
+
+.textshortcuts-shortcut-item:last-child {
+  border-bottom: none;
+}
+
+.textshortcuts-shortcut-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.textshortcuts-shortcut-trigger {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.textshortcuts-shortcut-content {
+  font-size: 13px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.textshortcuts-shortcut-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.textshortcuts-shortcut-category {
+  font-size: 11px;
+  background: #f3f4f6;
+  color: #6b7280;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.textshortcuts-shortcut-count {
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+/* Empty State */
+.textshortcuts-empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+/* Footer */
+.textshortcuts-footer {
+  padding: 12px 16px;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  font-size: 12px;
+  color: #6b7280;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.textshortcuts-footer kbd {
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: monospace;
+  font-size: 11px;
+  margin: 0 2px;
+}
+
+/* Overlay */
+.textshortcuts-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2147483646; /* Just below menu */
+  animation: textshortcuts-overlay-fadein 0.2s ease-out;
+}
+
+@keyframes textshortcuts-overlay-fadein {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Scrollbar Styling */
+.textshortcuts-shortcuts-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.textshortcuts-shortcuts-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.textshortcuts-shortcuts-list::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+
+.textshortcuts-shortcuts-list::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Notification Toast */
+.textshortcuts-notification {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #1f2937;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  z-index: 2147483647;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-size: 14px;
+  animation: textshortcuts-slide-in 0.3s ease-out;
+}
+
+@keyframes textshortcuts-slide-in {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.textshortcuts-notification.success {
+  background: #10b981;
+}
+
+.textshortcuts-notification.error {
+  background: #ef4444;
+}
+
+.textshortcuts-notification.info {
+  background: #3b82f6;
+}

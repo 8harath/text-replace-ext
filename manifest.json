@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "TextShortcuts",
-  "version": "1.0",
-  "description": "Create and manage text shortcuts for faster typing",
-  "permissions": ["storage", "activeTab"],
+  "version": "2.1.0",
+  "description": "Create and manage text shortcuts with variables, categories, statistics, and quick access keyboard shortcuts",
+  "author": "Bharath K",
+  "permissions": ["storage", "activeTab", "contextMenus"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -18,9 +19,27 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"]
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "css": ["content.css"]
     }
   ],
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Open TextShortcuts popup"
+    },
+    "quick_insert": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Space",
+        "mac": "Command+Shift+Space"
+      },
+      "description": "Show quick insert menu"
+    }
+  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
